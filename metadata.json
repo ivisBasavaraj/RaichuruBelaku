@@ -1,0 +1,5 @@
+{
+  "name": "Editorial - E-Newspaper Platform",
+  "description": "A digital newspaper platform allowing admins to upload PDFs and map interactive news regions, providing an immersive reading experience for users.",
+  "requestFramePermissions": []
+}
