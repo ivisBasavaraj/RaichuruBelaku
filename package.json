@@ -4,10 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "start": "NODE_ENV=production tsx server.ts",
+    "prepare:static": "node scripts/build-static-archive.mjs",
+    "predev": "node scripts/build-static-archive.mjs",
+    "dev": "vite",
+    "start": "vite preview --host 0.0.0.0",
+    "prebuild": "node scripts/build-static-archive.mjs",
     "build": "tsc -b && vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --host 0.0.0.0",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },

@@ -5,11 +5,12 @@ import { Calendar, ArrowRight, Newspaper, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import Masthead from '@/components/Masthead';
 import { Document, Page, pdfjs } from 'react-pdf';
+import { listPublishedNewspapers, type NewspaperSummary } from '@/lib/staticArchive';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export default function UserDashboard() {
-  const [newspapers, setNewspapers] = useState<any[]>([]);
+  const [newspapers, setNewspapers] = useState<NewspaperSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -26,11 +27,7 @@ export default function UserDashboard() {
 
   const fetchNewspapers = async () => {
     try {
-      console.log('Fetching newspapers from /api/user/newspapers');
-      const res = await fetch('/api/user/newspapers');
-      console.log('Response status:', res.status);
-      const data = await res.json();
-      console.log('Fetched newspapers:', data);
+      const data = await listPublishedNewspapers();
       setNewspapers(data);
     } catch (error) {
       console.error('Error fetching newspapers:', error);

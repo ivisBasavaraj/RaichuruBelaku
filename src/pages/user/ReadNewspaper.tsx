@@ -1,28 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { useParams, Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, X, ArrowLeft, ZoomIn, ZoomOut, Download } from 'lucide-react';
-import PopupHeader from '@/components/PopupHeader';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, X, ZoomIn, ZoomOut } from 'lucide-react';
 import popupHeaderImage from '@/components/image.png';
+import { getPublishedNewspaperById, type Article, type NewspaperRecord } from '@/lib/staticArchive';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-interface Article {
-  id: string;
-  title: string;
-  content: string;
-  page_number: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  image_path?: string;
-}
-
 export default function ReadNewspaper() {
   const { id } = useParams();
-  const [newspaper, setNewspaper] = useState<any>(null);
+  const [newspaper, setNewspaper] = useState<NewspaperRecord | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
@@ -30,10 +18,14 @@ export default function ReadNewspaper() {
   const [scale, setScale] = useState(1.0);
   const [imageZoom, setImageZoom] = useState(1);
   const [pageWidth, setPageWidth] = useState(window.innerWidth > 0 ? window.innerWidth : 800);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchNewspaperData();
+    setPageNumber(1);
+    setSelectedArticle(null);
+    void fetchNewspaperData();
   }, [id]);
 
   useEffect(() => {
@@ -41,12 +33,9 @@ export default function ReadNewspaper() {
     if (!element) return;
 
     const updateWidth = () => {
-      // For mobile screens, use window.innerWidth as a baseline to prevent the PDF 
-      // from expanding the container width before the layout settles
       const isMobile = window.innerWidth < 768;
       const padding = isMobile ? 8 : 32;
       const availableWidth = isMobile ? window.innerWidth : element.getBoundingClientRect().width;
-      
       const nextWidth = Math.max(280, Math.floor(availableWidth - padding));
       setPageWidth(nextWidth);
     };
@@ -63,20 +52,35 @@ export default function ReadNewspaper() {
   }, []);
 
   const fetchNewspaperData = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
     try {
-      const res = await fetch(`/api/user/newspaper/${id}`);
-      if (!res.ok) throw new Error('Failed to load');
-      const data = await res.json();
-      setNewspaper(data.newspaper);
+      if (!id) {
+        throw new Error('Missing newspaper id');
+      }
+
+      const data = await getPublishedNewspaperById(id);
+      if (!data) {
+        throw new Error('Newspaper not found');
+      }
+
+      setNewspaper(data);
       setArticles(data.articles);
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load newspaper';
       console.error('Error fetching newspaper:', error);
+      setNewspaper(null);
+      setArticles([]);
+      setLoadError(message);
       toast.error('Failed to load newspaper');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
+  const onDocumentLoadSuccess = ({ numPages: totalPages }: { numPages: number }) => {
+    setNumPages(totalPages);
   };
 
   const loadImage = (src: string) =>
@@ -97,8 +101,14 @@ export default function ReadNewspaper() {
       ]);
 
       const outputWidth = Math.max(headerImg.naturalWidth, mappedImg.naturalWidth);
-      const headerHeight = Math.max(1, Math.round((headerImg.naturalHeight / headerImg.naturalWidth) * outputWidth));
-      const mappedHeight = Math.max(1, Math.round((mappedImg.naturalHeight / mappedImg.naturalWidth) * outputWidth));
+      const headerHeight = Math.max(
+        1,
+        Math.round((headerImg.naturalHeight / headerImg.naturalWidth) * outputWidth),
+      );
+      const mappedHeight = Math.max(
+        1,
+        Math.round((mappedImg.naturalHeight / mappedImg.naturalWidth) * outputWidth),
+      );
 
       const canvas = document.createElement('canvas');
       canvas.width = outputWidth;
@@ -112,7 +122,13 @@ export default function ReadNewspaper() {
       ctx.drawImage(mappedImg, 0, headerHeight, outputWidth, mappedHeight);
 
       const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Failed to create image'))), 'image/png');
+        canvas.toBlob((result) => {
+          if (result) {
+            resolve(result);
+            return;
+          }
+          reject(new Error('Failed to create image'));
+        }, 'image/png');
       });
 
       const url = URL.createObjectURL(blob);
@@ -129,8 +145,26 @@ export default function ReadNewspaper() {
     }
   };
 
+  if (isLoading) {
+    return <div className="h-screen flex items-center justify-center text-zinc-400">Loading archive...</div>;
+  }
+
   if (!newspaper) {
-    return <div className="h-screen flex items-center justify-center text-zinc-400">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-[#111111] text-white flex flex-col items-center justify-center px-6 text-center">
+        <h1 className="font-serif text-3xl font-bold mb-3">Edition unavailable</h1>
+        <p className="text-zinc-400 max-w-md mb-6">
+          {loadError || 'This newspaper could not be loaded from the static archive.'}
+        </p>
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2 text-sm font-bold text-black hover:bg-zinc-200 transition-colors"
+        >
+          <ArrowLeft size={16} />
+          Back to archive
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -151,14 +185,16 @@ export default function ReadNewspaper() {
         <div className="flex items-center gap-2 md:gap-4 shrink-0">
           <div className="flex items-center bg-zinc-800 rounded-lg p-0.5">
             <button
-              onClick={() => setScale((s) => Math.max(0.5, s - 0.1))}
+              onClick={() => setScale((value) => Math.max(0.5, value - 0.1))}
               className="px-1.5 md:px-3 py-1 hover:bg-zinc-700 rounded text-[10px] md:text-sm"
             >
               -
             </button>
-            <span className="px-1 md:px-2 text-[9px] md:text-xs text-zinc-400 min-w-[28px] md:min-w-[40px] text-center">{Math.round(scale * 100)}%</span>
+            <span className="px-1 md:px-2 text-[9px] md:text-xs text-zinc-400 min-w-[28px] md:min-w-[40px] text-center">
+              {Math.round(scale * 100)}%
+            </span>
             <button
-              onClick={() => setScale((s) => Math.min(2.0, s + 0.1))}
+              onClick={() => setScale((value) => Math.min(2.0, value + 0.1))}
               className="px-1.5 md:px-3 py-1 hover:bg-zinc-700 rounded text-[10px] md:text-sm"
             >
               +
@@ -168,8 +204,14 @@ export default function ReadNewspaper() {
       </header>
 
       <div className="flex-1 flex overflow-hidden relative min-w-0">
-        <div ref={viewerRef} className="flex-1 overflow-auto flex flex-col items-center p-1 md:p-2 bg-[#2A2A2A] touch-none w-full min-w-0">
-          <div className="relative shadow-2xl transition-transform duration-200 origin-top mt-0 mb-12" style={{ transform: `scale(${scale})` }}>
+        <div
+          ref={viewerRef}
+          className="flex-1 overflow-auto flex flex-col items-center p-1 md:p-2 bg-[#2A2A2A] touch-none w-full min-w-0"
+        >
+          <div
+            className="relative shadow-2xl transition-transform duration-200 origin-top mt-0 mb-12"
+            style={{ transform: `scale(${scale})` }}
+          >
             <Document
               file={newspaper.pdf_path}
               onLoadSuccess={onDocumentLoadSuccess}
@@ -187,7 +229,7 @@ export default function ReadNewspaper() {
 
                 <div className="absolute inset-0 pointer-events-none">
                   {articles
-                    .filter((a) => a.page_number === pageNumber)
+                    .filter((article) => article.page_number === pageNumber)
                     .map((article) => (
                       <button
                         key={article.id}
@@ -215,7 +257,6 @@ export default function ReadNewspaper() {
         {selectedArticle && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[120] p-0 md:p-6 animate-in fade-in duration-200">
             <div className="w-full max-w-6xl h-full md:h-auto md:max-h-[92vh] bg-[#111111] text-white md:rounded-2xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] border-0 md:border border-zinc-800 flex flex-col overflow-hidden">
-              {/* Modern Toolbar */}
               <div className="bg-[#1A1A1A]/95 backdrop-blur-md px-4 py-3 border-b border-zinc-800 flex items-center justify-between gap-4 sticky top-0 z-10">
                 <div className="flex flex-col min-w-0">
                   <h2 className="font-serif font-bold text-base md:text-lg leading-tight truncate text-zinc-100">
@@ -235,7 +276,7 @@ export default function ReadNewspaper() {
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="hidden sm:flex items-center bg-zinc-900/50 rounded-full border border-zinc-800 p-1">
                     <button
-                      onClick={() => setImageZoom((z) => Math.max(0.5, Number((z - 0.2).toFixed(2))))}
+                      onClick={() => setImageZoom((value) => Math.max(0.5, Number((value - 0.2).toFixed(2))))}
                       className="p-1.5 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
                       title="Zoom out"
                     >
@@ -245,7 +286,7 @@ export default function ReadNewspaper() {
                       {Math.round(imageZoom * 100)}%
                     </span>
                     <button
-                      onClick={() => setImageZoom((z) => Math.min(3, Number((z + 0.2).toFixed(2))))}
+                      onClick={() => setImageZoom((value) => Math.min(3, Number((value + 0.2).toFixed(2))))}
                       className="p-1.5 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
                       title="Zoom in"
                     >
@@ -262,7 +303,7 @@ export default function ReadNewspaper() {
                       <span className="hidden xs:inline">Save</span>
                     </button>
                   )}
-                  
+
                   <button
                     onClick={() => setSelectedArticle(null)}
                     className="w-9 h-9 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-red-500/20 hover:text-red-500 text-zinc-400 transition-all border border-zinc-700/50"
@@ -272,13 +313,13 @@ export default function ReadNewspaper() {
                 </div>
               </div>
 
-              {/* Layout Content */}
               <div className="flex-1 flex flex-col overflow-hidden bg-[#0A0A0A]">
-                {/* Image Container */}
                 <div className="flex-1 overflow-auto bg-black flex items-start justify-center p-4 md:p-8 custom-scrollbar">
                   {selectedArticle.image_path ? (
-                    <div className="relative group/img cursor-zoom-in" 
-                         onClick={() => setImageZoom(z => z === 1 ? 1.5 : 1)}>
+                    <div
+                      className="relative group/img cursor-zoom-in"
+                      onClick={() => setImageZoom((value) => (value === 1 ? 1.5 : 1))}
+                    >
                       <img
                         src={selectedArticle.image_path}
                         alt={selectedArticle.title}
@@ -304,7 +345,7 @@ export default function ReadNewspaper() {
       <div className="bg-[#1A1A1A] border-t border-zinc-800 p-3 md:p-4 flex justify-center items-center gap-4 md:gap-8 z-20">
         <button
           disabled={pageNumber <= 1}
-          onClick={() => setPageNumber((p) => p - 1)}
+          onClick={() => setPageNumber((value) => value - 1)}
           className="p-2 md:p-3 rounded-full hover:bg-zinc-800 disabled:opacity-30 text-white transition-colors border border-zinc-700"
         >
           <ChevronLeft size={20} className="md:w-6 md:h-6" />
@@ -314,7 +355,7 @@ export default function ReadNewspaper() {
         </span>
         <button
           disabled={pageNumber >= numPages}
-          onClick={() => setPageNumber((p) => p + 1)}
+          onClick={() => setPageNumber((value) => value + 1)}
           className="p-2 md:p-3 rounded-full hover:bg-zinc-800 disabled:opacity-30 text-white transition-colors border border-zinc-700"
         >
           <ChevronRight size={20} className="md:w-6 md:h-6" />
