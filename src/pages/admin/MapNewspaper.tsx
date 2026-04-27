@@ -573,7 +573,9 @@ export default function MapNewspaper() {
                   ರದ್ದುಮಾಡಿ
                 </button>
                 <button 
-                  onClick={handleSaveArticle}
+                  onClick={() => {
+                    void handleSaveArticle();
+                  }}
                   disabled={!formData.title}
                   className="px-4 py-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 text-sm md:text-base"
                 >
