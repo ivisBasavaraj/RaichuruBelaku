@@ -5,13 +5,13 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import jwt from 'jsonwebtoken';
+import { UPLOAD_ROOT, ensureDataDirectories } from './paths';
 
 export const adminRouter = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
 
 // Configure Multer for secure file uploads
-const DATA_DIR = path.join(process.cwd(), 'data');
-const UPLOAD_ROOT = path.join(DATA_DIR, 'uploads');
+ensureDataDirectories();
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

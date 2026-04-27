@@ -1,20 +1,9 @@
 import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
+import { DB_PATH, ensureDataDirectories } from './paths';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Use a data directory for persistence on Render
-const dataDir = path.join(process.cwd(), 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-const dbPath = path.join(dataDir, 'database.sqlite');
-export const db = new Database(dbPath);
+ensureDataDirectories();
+export const db = new Database(DB_PATH);
 
 export function initDb() {
   // Users Table

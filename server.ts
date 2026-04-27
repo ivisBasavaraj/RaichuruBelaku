@@ -1,29 +1,23 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
-import multer from 'multer';
-import { db, initDb } from './src/server/db';
+import { initDb } from './src/server/db';
 import { authRouter } from './src/server/auth';
 import { adminRouter } from './src/server/admin';
 import { userRouter } from './src/server/user';
+import { DATA_DIR, UPLOAD_ROOT, ensureDataDirectories } from './src/server/paths';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const DATA_DIR = path.join(process.cwd(), 'data');
-const UPLOAD_ROOT = path.join(DATA_DIR, 'uploads');
 
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
   // Ensure data and uploads directories exist
-  if (!fs.existsSync(UPLOAD_ROOT)) {
-    console.log('Creating uploads directory at:', UPLOAD_ROOT);
-    fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
-  }
+  ensureDataDirectories();
+  console.log('Using data directory:', DATA_DIR);
 
   app.use(express.json());
 
